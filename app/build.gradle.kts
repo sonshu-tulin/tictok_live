@@ -57,4 +57,12 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4") // constraintlayout布局
+    implementation("androidx.media3:media3-exoplayer:1.2.1") // 核心播放器
+    implementation("androidx.media3:media3-ui:1.2.1") // 播放器控件
+    implementation("androidx.media3:media3-exoplayer-dash:1.2.1") // DASH 直播支持（.mpd 格式）
+    implementation("androidx.appcompat:appcompat:1.6.1") // appcompat
+    implementation("androidx.recyclerview:recyclerview:1.3.2") //recyclerView
 }

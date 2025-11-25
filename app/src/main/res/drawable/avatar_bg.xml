@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval"> <!-- oval=圆形，无需corners -->
+    <solid android:color="#2BC0A9" /> <!-- 原颜色保留 -->
+    <!-- 移除多余的size标签（ImageView的width/height已控制大小，size会覆盖） -->
+</shape>
