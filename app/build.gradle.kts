@@ -58,11 +58,23 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-
+    // 布局
     implementation("androidx.constraintlayout:constraintlayout:2.1.4") // constraintlayout布局
+
+    implementation("androidx.appcompat:appcompat:1.6.1") // appcompat
+    implementation("androidx.recyclerview:recyclerview:1.3.2") //recyclerView
+
+    // 播放器
     implementation("androidx.media3:media3-exoplayer:1.2.1") // 核心播放器
     implementation("androidx.media3:media3-ui:1.2.1") // 播放器控件
     implementation("androidx.media3:media3-exoplayer-dash:1.2.1") // DASH 直播支持（.mpd 格式）
-    implementation("androidx.appcompat:appcompat:1.6.1") // appcompat
-    implementation("androidx.recyclerview:recyclerview:1.3.2") //recyclerView
+
+    // retrofit
+    implementation("com.squareup.okhttp3:okhttp:4.12.0") //okhttp
+    implementation("com.squareup.retrofit2:retrofit:2.9.0") //retrofit
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0") // gson
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0") //日志拦截器
+
+    // 加载网络头像
+    implementation("com.github.bumptech.glide:glide:4.16.0")
 }

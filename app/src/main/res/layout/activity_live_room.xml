@@ -69,9 +69,9 @@
                     android:textColor="@color/white"
                     />
 
-                <!--点赞量-->
+                <!--关注量-->
                 <TextView
-                    android:id="@+id/tv_host_like"
+                    android:id="@+id/tv_host_follower"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="11.4K"
@@ -119,6 +119,7 @@
                 android:layout_height="wrap_content"
                 android:drawableStart="@drawable/close"
                 android:layout_marginLeft="10dp"
+                android:clickable="true"
                 />
 
         </LinearLayout>
