@@ -18,12 +18,18 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.dash.DashMediaSource;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.ui.PlayerView;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bytedance.tictok_live.R;
+import com.bytedance.tictok_live.adapter.CommentAdapter;
+import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.model.HostInfo;
 import com.bytedance.tictok_live.network.HostApiService;
 import com.bytedance.tictok_live.network.RetrofitClient;
+
+import java.util.List;
 
 import retrofit2.Call;
 import retrofit2.Response;
@@ -38,10 +44,15 @@ public class LiveRoomActivity extends AppCompatActivity {
     private TextView tvHostFollower;
     private LinearLayout llOnlineContainer;
     private TextView tvCloseOnline;
+    private RecyclerView rvComments;
 
     // 对象
     private ExoPlayer exoPlayer;
     private HostInfo hostInfo;
+    private List<Comment> commentList;
+
+    // Adapter
+    private CommentAdapter commentAdapter;
 
     // 网络
     private HostApiService hostApiService;
@@ -62,6 +73,7 @@ public class LiveRoomActivity extends AppCompatActivity {
         loadData();
         // 4. 监听关闭在线人数控件
         listenCloseOnline();
+        // 5. 在3. 的加载数据中获取公屏评论
     }
 
     // 绑定控件
@@ -72,7 +84,7 @@ public class LiveRoomActivity extends AppCompatActivity {
         tvHostFollower = findViewById(R.id.tv_host_follower);
         llOnlineContainer = findViewById(R.id.ll_online_container);
         tvCloseOnline = findViewById(R.id.tv_close_online);
-
+        rvComments = findViewById(R.id.rv_comments);
     }
 
     /**
@@ -151,6 +163,31 @@ public class LiveRoomActivity extends AppCompatActivity {
                 t.printStackTrace();
             }
         });
+
+        // 3. 调用 API 获取公屏评论（异步）
+        hostApiService.getComments().enqueue(new retrofit2.Callback<List<Comment>>(){
+
+            @Override
+            public void onResponse(Call<List<Comment>> call, Response<List<Comment>> response) {
+                if (response.isSuccessful() && response.body() !=null){
+                    LinearLayoutManager layoutManager = new LinearLayoutManager(LiveRoomActivity.this);
+                    layoutManager.setOrientation(LinearLayoutManager.VERTICAL);
+                    rvComments.setLayoutManager(layoutManager);
+                    commentList = response.body();
+                    commentAdapter = new CommentAdapter(commentList);
+                    rvComments.setAdapter(commentAdapter);
+                    Log.d(TAG, "评论信息加载成功：" + commentList.toString());
+                }else{
+                    Log.w(TAG, "评论信息请求成功但无数据，code：" + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<List<Comment>> call, Throwable t) {
+                Log.e(TAG, "评论信息请求失败", t);
+                t.printStackTrace();
+            }
+        });
     }
 
     // 更新主播信息到UI
@@ -190,6 +227,7 @@ public class LiveRoomActivity extends AppCompatActivity {
         });
 
     }
+
 
     @Override
     protected void onResume() {
