@@ -3,7 +3,9 @@ package com.bytedance.tictok_live.activity;
 import android.content.Context;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.OptIn;
@@ -33,8 +35,9 @@ public class LiveRoomActivity extends AppCompatActivity {
     private PlayerView playerView;
     private ImageView ivHostAvatar;
     private TextView tvHostName;
-
     private TextView tvHostFollower;
+    private LinearLayout llOnlineContainer;
+    private TextView tvCloseOnline;
 
     // 对象
     private ExoPlayer exoPlayer;
@@ -57,6 +60,8 @@ public class LiveRoomActivity extends AppCompatActivity {
         initMedia3PlayerForLive();
         // 3. 加载数据
         loadData();
+        // 4. 监听关闭在线人数控件
+        listenCloseOnline();
     }
 
     // 绑定控件
@@ -65,11 +70,9 @@ public class LiveRoomActivity extends AppCompatActivity {
         ivHostAvatar = findViewById(R.id.iv_host_avatar);
         tvHostName = findViewById(R.id.tv_host_name);
         tvHostFollower = findViewById(R.id.tv_host_follower);
+        llOnlineContainer = findViewById(R.id.ll_online_container);
+        tvCloseOnline = findViewById(R.id.tv_close_online);
 
-        // 防御性判空：检查控件是否初始化成功
-        if (playerView == null || ivHostAvatar == null || tvHostName == null || tvHostFollower == null) {
-            Log.e(TAG, "控件初始化失败，请检查布局文件中的ID是否正确");
-        }
     }
 
     /**
@@ -150,8 +153,6 @@ public class LiveRoomActivity extends AppCompatActivity {
         });
     }
 
-
-
     // 更新主播信息到UI
     private void updateHostInfoUI() {
         if (hostInfo == null) return;
@@ -175,6 +176,19 @@ public class LiveRoomActivity extends AppCompatActivity {
         ivHostAvatar.setImageResource(R.mipmap.ic_launcher);
         tvHostName.setText("默认主播");
         tvHostFollower.setText("0");
+    }
+
+    /**
+     * 监听在线人数关闭控件
+     */
+    private void listenCloseOnline() {
+        tvCloseOnline.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                llOnlineContainer.setVisibility(View.GONE);
+            }
+        });
+
     }
 
     @Override
