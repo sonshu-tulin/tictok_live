@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="12dp"
+    android:height="12dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 叉号路径：用 fillColor 上色，strokeWidth 控制线条粗细 -->
+    <path
+        android:pathData="M18,6L6,18M6,6L18,18"
+        android:fillColor="@color/white"
+    android:strokeWidth="2"
+    android:strokeLineCap="round"/>
+</vector>
