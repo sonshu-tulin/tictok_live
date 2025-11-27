@@ -54,4 +54,12 @@ public class CommentAdapter extends RecyclerView.Adapter<CommentViewHolder> {
         return commentList != null ? commentList.size() : 0;
     }
 
+    /**
+     * 新增单条评论
+     * @param newComment 新评论
+     */
+    public void addComment(Comment newComment) {
+        commentList.add(newComment);
+        notifyItemInserted(commentList.size() - 1);
+    }
 }

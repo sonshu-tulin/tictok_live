@@ -2,11 +2,16 @@ package com.bytedance.tictok_live.activity;
 
 import android.content.Context;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.OptIn;
 import androidx.appcompat.app.AppCompatActivity;
@@ -29,9 +34,11 @@ import com.bytedance.tictok_live.model.HostInfo;
 import com.bytedance.tictok_live.network.HostApiService;
 import com.bytedance.tictok_live.network.RetrofitClient;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import retrofit2.Call;
+import retrofit2.Callback;
 import retrofit2.Response;
 
 public class LiveRoomActivity extends AppCompatActivity {
@@ -45,11 +52,11 @@ public class LiveRoomActivity extends AppCompatActivity {
     private LinearLayout llOnlineContainer;
     private TextView tvCloseOnline;
     private RecyclerView rvComments;
+    private EditText etSendComment;
 
     // 对象
     private ExoPlayer exoPlayer;
     private HostInfo hostInfo;
-    private List<Comment> commentList;
 
     // Adapter
     private CommentAdapter commentAdapter;
@@ -60,6 +67,9 @@ public class LiveRoomActivity extends AppCompatActivity {
     // DASH 直播源
     private static final String LIVE_DASH_URL = "https://akamaibroadcasteruseast.akamaized.net/cmaf/live/657078/akasource/out.mpd";
 
+    // 评论最大长度
+    public static final int COMMENT_MAX_LENGTH = 128;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -67,13 +77,23 @@ public class LiveRoomActivity extends AppCompatActivity {
 
         // 1. 初始化控件
         initViews();
+
         // 2. 初始化 Media3 ExoPlayer 播放直播流
         initMedia3PlayerForLive();
-        // 3. 加载数据
+
+        // 3. 初始化API接口
+        hostApiService = RetrofitClient.createApi(HostApiService.class);
+
+        // 4. 加载数据
         loadData();
-        // 4. 监听关闭在线人数控件
+
+        // 5. 监听关闭在线人数控件
         listenCloseOnline();
-        // 5. 在3. 的加载数据中获取公屏评论
+
+        // 6. 在4. 的加载数据中获取公屏评论
+
+        // 7. 监听回车发送评论
+        listenEnterSendComment();
     }
 
     // 绑定控件
@@ -85,6 +105,7 @@ public class LiveRoomActivity extends AppCompatActivity {
         llOnlineContainer = findViewById(R.id.ll_online_container);
         tvCloseOnline = findViewById(R.id.tv_close_online);
         rvComments = findViewById(R.id.rv_comments);
+        etSendComment = findViewById(R.id.et_send_comment);
     }
 
     /**
@@ -130,8 +151,7 @@ public class LiveRoomActivity extends AppCompatActivity {
      * 加载数据
      */
     private void loadData() {
-        // 1. 初始化API接口
-        hostApiService = RetrofitClient.createApi(HostApiService.class);
+
 
         if (hostApiService == null) {
             Log.e(TAG, "HostApiService 初始化失败");
@@ -170,13 +190,25 @@ public class LiveRoomActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<List<Comment>> call, Response<List<Comment>> response) {
                 if (response.isSuccessful() && response.body() !=null){
-                    LinearLayoutManager layoutManager = new LinearLayoutManager(LiveRoomActivity.this);
-                    layoutManager.setOrientation(LinearLayoutManager.VERTICAL);
-                    rvComments.setLayoutManager(layoutManager);
-                    commentList = response.body();
-                    commentAdapter = new CommentAdapter(commentList);
+                    // 设置布局
+                    if (rvComments.getLayoutManager() == null) {
+                        LinearLayoutManager layoutManager = new LinearLayoutManager(LiveRoomActivity.this);
+                        layoutManager.setOrientation(LinearLayoutManager.VERTICAL);
+                        rvComments.setLayoutManager(layoutManager);
+                    }
+
+                    // 过虑空或过长评论
+                    ArrayList<Comment> validComments = new ArrayList<>();
+                    for (Comment comment : response.body()) {
+                        if (!TextUtils.isEmpty(comment.getComment()) && comment.getComment().length() <= COMMENT_MAX_LENGTH){
+                            validComments.add(comment);
+                        }
+                    }
+
+                    // 给适配器添加评论
+                    commentAdapter = new CommentAdapter(validComments);
                     rvComments.setAdapter(commentAdapter);
-                    Log.d(TAG, "评论信息加载成功：" + commentList.toString());
+                    rvComments.scrollToPosition(commentAdapter.getItemCount() - 1);
                 }else{
                     Log.w(TAG, "评论信息请求成功但无数据，code：" + response.code());
                 }
@@ -226,6 +258,59 @@ public class LiveRoomActivity extends AppCompatActivity {
             }
         });
 
+    }
+
+    /**
+     * 监听回车发送评论
+     */
+    private void listenEnterSendComment() {
+        etSendComment.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_SEND){
+                    // 去掉首尾空格
+                    String commentContent = v.getText().toString().trim();
+                    // 1. 内容为空或过长
+                    if (TextUtils.isEmpty(commentContent) && commentContent.length() > COMMENT_MAX_LENGTH){
+                        return true;
+                    }
+
+                    // 2. 发送评论
+                    sendComment(commentContent);
+
+                    // 3. 清空输入框
+                    etSendComment.setText("");
+
+                    return true;
+                }
+                return false;
+            }
+        });
+    }
+
+    /**
+     * 发送评论
+     * @param commentContent 评论内容
+     */
+    private void sendComment(String commentContent) {
+        hostApiService.sendComment(commentContent).enqueue(new Callback<Comment>() {
+            @Override
+            public void onResponse(Call<Comment> call, Response<Comment> response) {
+                if (response.isSuccessful() && response.body() != null){
+                    Comment newComment = response.body();
+                    commentAdapter.addComment(newComment);
+                    rvComments.smoothScrollToPosition(commentAdapter.getItemCount() - 1);  //滑动到最后
+                    Log.d(TAG,"发送成功:" + newComment);
+                }else {
+                    Log.d(TAG, "发送失败：API返回错误");
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Comment> call, Throwable t) {
+                Toast.makeText(LiveRoomActivity.this,"评论失败，请检查网络", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
 
