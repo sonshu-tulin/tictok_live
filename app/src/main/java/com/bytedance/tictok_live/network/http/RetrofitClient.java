@@ -1,4 +1,4 @@
-package com.bytedance.tictok_live.network;
+package com.bytedance.tictok_live.network.http;
 
 import androidx.media3.common.util.Log;
 

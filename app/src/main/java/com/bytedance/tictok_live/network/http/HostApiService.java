@@ -1,4 +1,4 @@
-package com.bytedance.tictok_live.network;
+package com.bytedance.tictok_live.network.http;
 
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.model.HostInfo;

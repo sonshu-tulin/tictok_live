@@ -31,8 +31,9 @@ import com.bytedance.tictok_live.R;
 import com.bytedance.tictok_live.adapter.CommentAdapter;
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.model.HostInfo;
-import com.bytedance.tictok_live.network.HostApiService;
-import com.bytedance.tictok_live.network.RetrofitClient;
+import com.bytedance.tictok_live.network.http.HostApiService;
+import com.bytedance.tictok_live.network.http.RetrofitClient;
+import com.bytedance.tictok_live.network.websocket.WebSocketManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,6 +54,7 @@ public class LiveRoomActivity extends AppCompatActivity {
     private TextView tvCloseOnline;
     private RecyclerView rvComments;
     private EditText etSendComment;
+    private TextView tvOnline;
 
     // 对象
     private ExoPlayer exoPlayer;
@@ -69,6 +71,13 @@ public class LiveRoomActivity extends AppCompatActivity {
 
     // 评论最大长度
     public static final int COMMENT_MAX_LENGTH = 128;
+
+    // 在线人数初始值设100，模拟已有观众
+    private int onlineCount = 100;
+
+    // WebSocket
+    private WebSocketManager webSocketManager;
+    public static final String ONLINE_COUNT_INCREASE_MSG = "online_increase"; // 约定在线人数加1触发消息
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,6 +103,9 @@ public class LiveRoomActivity extends AppCompatActivity {
 
         // 7. 监听回车发送评论
         listenEnterSendComment();
+
+        // 8. WebSocket监听消息更新在线人数
+        webSocketListenMessage();
     }
 
     // 绑定控件
@@ -106,6 +118,7 @@ public class LiveRoomActivity extends AppCompatActivity {
         tvCloseOnline = findViewById(R.id.tv_close_online);
         rvComments = findViewById(R.id.rv_comments);
         etSendComment = findViewById(R.id.et_send_comment);
+        tvOnline = findViewById(R.id.tv_online);
     }
 
     /**
@@ -134,7 +147,7 @@ public class LiveRoomActivity extends AppCompatActivity {
                 .setUserAgent("Media3-LivePlayer/1.0")
                 .setConnectTimeoutMs(5000) // 连接超时 5 秒
                 .setReadTimeoutMs(5000) // 读取超时 5 秒
-                .setAllowCrossProtocolRedirects(true); //允许跨协议重定向
+                .setAllowCrossProtocolRedirects(true); // 允许跨协议重定向
 
         // 4. 构建 DASH 直播源
         DashMediaSource dashMediaSource = new DashMediaSource.Factory(dataSourceFactory)
@@ -151,24 +164,22 @@ public class LiveRoomActivity extends AppCompatActivity {
      * 加载数据
      */
     private void loadData() {
-
-
         if (hostApiService == null) {
             Log.e(TAG, "HostApiService 初始化失败");
             showDefaultHostInfo();
             return;
         }
 
-        // 2. 调用 API 获取主播信息（异步）
-        hostApiService.getHostInfo().enqueue(new retrofit2.Callback<HostInfo>(){
+        // 1. 调用 API 获取主播信息（异步）
+        hostApiService.getHostInfo().enqueue(new retrofit2.Callback<HostInfo>() {
             @Override
             public void onResponse(Call<HostInfo> call, Response<HostInfo> response) {
-                if (response.isSuccessful() && response.body() != null){
+                if (response.isSuccessful() && response.body() != null) {
                     hostInfo = response.body();
                     Log.d(TAG, "主播信息加载成功：" + hostInfo.toString());
-                    //填充主播信息到UI
+                    // 填充主播信息到UI
                     updateHostInfoUI();
-                }else {
+                } else {
                     // 请求成功但无数据，显示默认信息
                     Log.w(TAG, "主播信息请求成功但无数据，code：" + response.code());
                     showDefaultHostInfo();
@@ -184,12 +195,12 @@ public class LiveRoomActivity extends AppCompatActivity {
             }
         });
 
-        // 3. 调用 API 获取公屏评论（异步）
-        hostApiService.getComments().enqueue(new retrofit2.Callback<List<Comment>>(){
+        // 2. 调用 API 获取公屏评论（异步）
+        hostApiService.getComments().enqueue(new retrofit2.Callback<List<Comment>>() {
 
             @Override
             public void onResponse(Call<List<Comment>> call, Response<List<Comment>> response) {
-                if (response.isSuccessful() && response.body() !=null){
+                if (response.isSuccessful() && response.body() != null) {
                     // 设置布局
                     if (rvComments.getLayoutManager() == null) {
                         LinearLayoutManager layoutManager = new LinearLayoutManager(LiveRoomActivity.this);
@@ -200,7 +211,7 @@ public class LiveRoomActivity extends AppCompatActivity {
                     // 过虑空或过长评论
                     ArrayList<Comment> validComments = new ArrayList<>();
                     for (Comment comment : response.body()) {
-                        if (!TextUtils.isEmpty(comment.getComment()) && comment.getComment().length() <= COMMENT_MAX_LENGTH){
+                        if (!TextUtils.isEmpty(comment.getComment()) && comment.getComment().length() <= COMMENT_MAX_LENGTH) {
                             validComments.add(comment);
                         }
                     }
@@ -209,7 +220,7 @@ public class LiveRoomActivity extends AppCompatActivity {
                     commentAdapter = new CommentAdapter(validComments);
                     rvComments.setAdapter(commentAdapter);
                     rvComments.scrollToPosition(commentAdapter.getItemCount() - 1);
-                }else{
+                } else {
                     Log.w(TAG, "评论信息请求成功但无数据，code：" + response.code());
                 }
             }
@@ -220,6 +231,9 @@ public class LiveRoomActivity extends AppCompatActivity {
                 t.printStackTrace();
             }
         });
+
+        // 3. 初始化在线人数
+        tvOnline.setText(onlineCount + "");
     }
 
     // 更新主播信息到UI
@@ -267,11 +281,11 @@ public class LiveRoomActivity extends AppCompatActivity {
         etSendComment.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (actionId == EditorInfo.IME_ACTION_SEND){
+                if (actionId == EditorInfo.IME_ACTION_SEND) {
                     // 去掉首尾空格
                     String commentContent = v.getText().toString().trim();
                     // 1. 内容为空或过长
-                    if (TextUtils.isEmpty(commentContent) && commentContent.length() > COMMENT_MAX_LENGTH){
+                    if (TextUtils.isEmpty(commentContent) || commentContent.length() > COMMENT_MAX_LENGTH) {
                         return true;
                     }
 
@@ -290,27 +304,63 @@ public class LiveRoomActivity extends AppCompatActivity {
 
     /**
      * 发送评论
+     *
      * @param commentContent 评论内容
      */
     private void sendComment(String commentContent) {
         hostApiService.sendComment(commentContent).enqueue(new Callback<Comment>() {
             @Override
             public void onResponse(Call<Comment> call, Response<Comment> response) {
-                if (response.isSuccessful() && response.body() != null){
+                if (response.isSuccessful() && response.body() != null) {
                     Comment newComment = response.body();
                     commentAdapter.addComment(newComment);
-                    rvComments.smoothScrollToPosition(commentAdapter.getItemCount() - 1);  //滑动到最后
-                    Log.d(TAG,"发送成功:" + newComment);
-                }else {
+                    rvComments.smoothScrollToPosition(commentAdapter.getItemCount() - 1);  // 滑动到最后
+                    Log.d(TAG, "发送成功:" + newComment);
+
+                    // 通过WebSocket发送在线人数 + 1的消息
+                    if (webSocketManager != null && webSocketManager.isConnected){
+                        webSocketManager.sendMessage(ONLINE_COUNT_INCREASE_MSG);
+                        Log.d(TAG, "发送评论成功，触发WebSocket在线人数+1");
+                    }else {
+                        Log.e(TAG, "WebSocket未连接，无法触发在线人数更新");
+                        runOnUiThread(() -> {
+                            onlineCount++;
+                            tvOnline.setText(String.valueOf(onlineCount));
+                        });
+                    }
+                } else {
                     Log.d(TAG, "发送失败：API返回错误");
                 }
             }
 
             @Override
             public void onFailure(Call<Comment> call, Throwable t) {
-                Toast.makeText(LiveRoomActivity.this,"评论失败，请检查网络", Toast.LENGTH_SHORT).show();
+                Toast.makeText(LiveRoomActivity.this, "评论失败，请检查网络", Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    /**
+     * WebSocket监听消息更新在线人数
+     */
+    private void webSocketListenMessage() {
+        // 初始化WebSocket
+        webSocketManager = WebSocketManager.getInstance();
+
+        // 设置消息监听
+        webSocketManager.setOnMessageReceivedListener(message -> {
+            // 切换到主线程更新UI（WebSocket回调在子线程）
+            runOnUiThread(() -> {
+                if (ONLINE_COUNT_INCREASE_MSG.equals(message)) {
+                    onlineCount++;
+                    tvOnline.setText(onlineCount + "");
+                    Log.d("WebSocket","在线人数更新：" + onlineCount);
+                }
+            });
+        });
+
+        // 建立WebSocket连接
+        webSocketManager.connect();
     }
 
 
@@ -333,9 +383,16 @@ public class LiveRoomActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // 释放播放器
         if (exoPlayer != null) {
             exoPlayer.release();
             exoPlayer = null;
         }
+
+        // 关闭WebSocket连接
+        if(webSocketManager != null){
+            webSocketManager.disConnect();
+        }
+
     }
 }
