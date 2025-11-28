@@ -1,4 +1,4 @@
-package com.bytedance.tictok_live.network.http;
+package com.bytedance.tictok_live.network.retrofit;
 
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.model.HostInfo;
@@ -12,7 +12,7 @@ import retrofit2.http.GET;
 import retrofit2.http.POST;
 
 /**
- * 主播相关API接口
+ * http相关API接口
  */
 public interface HostApiService {
 

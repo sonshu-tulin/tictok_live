@@ -1,4 +1,4 @@
-package com.bytedance.tictok_live.viewholder;
+package com.bytedance.tictok_live.recycler;
 
 import android.content.Context;
 import android.view.View;
@@ -21,7 +21,7 @@ public class CommentViewHolder extends RecyclerView.ViewHolder {
     TextView tvCommentName;
     TextView tvCommentContent;
 
-    //绑定控件
+    // 绑定控件
     public CommentViewHolder(@NonNull View itemView) {
         super(itemView);
         ivCommentAvatar = itemView.findViewById(R.id.iv_comment_avatar);
@@ -29,8 +29,8 @@ public class CommentViewHolder extends RecyclerView.ViewHolder {
         tvCommentContent = itemView.findViewById(R.id.tv_comment_content);
     }
 
-    //绑定数据
-    public void bindData(Comment comment){
+    // 绑定数据
+    public void bindData(Comment comment) {
         Context context = itemView.getContext();
 
         Glide.with(context)

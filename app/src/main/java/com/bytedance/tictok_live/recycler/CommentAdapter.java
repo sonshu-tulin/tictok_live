@@ -1,5 +1,6 @@
-package com.bytedance.tictok_live.adapter;
+package com.bytedance.tictok_live.recycler;
 
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -9,14 +10,15 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bytedance.tictok_live.R;
 import com.bytedance.tictok_live.model.Comment;
-import com.bytedance.tictok_live.viewholder.CommentViewHolder;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 评论适配器，解析公屏评论信息
  */
 public class CommentAdapter extends RecyclerView.Adapter<CommentViewHolder> {
+    public static final String TAG = "CommentAdapter";
 
     private List<Comment> commentList;
 
@@ -61,5 +63,18 @@ public class CommentAdapter extends RecyclerView.Adapter<CommentViewHolder> {
     public void addComment(Comment newComment) {
         commentList.add(newComment);
         notifyItemInserted(commentList.size() - 1);
+    }
+
+
+    /**
+     * 设置评论数据
+     * @param comments 评论列表
+     */
+    public void setData(List<Comment> comments) {
+        if (comments == null) {
+            commentList = new ArrayList<>();
+        }
+        commentList.addAll(comments);
+        notifyDataSetChanged();
     }
 }

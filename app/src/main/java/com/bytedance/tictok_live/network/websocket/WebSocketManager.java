@@ -1,6 +1,5 @@
 package com.bytedance.tictok_live.network.websocket;
 
-import android.nfc.Tag;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -28,12 +27,14 @@ public class WebSocketManager {
 
     public boolean isConnected = false; // 默认未连接
 
+
+
     // 单例模式，确保全局只有一个WebSocket连接
     public static WebSocketManager getInstance() {
         if (instance == null) {
             synchronized (WebSocketManager.class) {
                 if (instance == null) {
-                    return new WebSocketManager();
+                    return instance = new WebSocketManager();
                 }
             }
         }

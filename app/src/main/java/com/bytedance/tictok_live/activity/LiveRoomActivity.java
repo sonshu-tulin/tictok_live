@@ -28,11 +28,11 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bytedance.tictok_live.R;
-import com.bytedance.tictok_live.adapter.CommentAdapter;
+import com.bytedance.tictok_live.recycler.CommentAdapter;
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.model.HostInfo;
-import com.bytedance.tictok_live.network.http.HostApiService;
-import com.bytedance.tictok_live.network.http.RetrofitClient;
+import com.bytedance.tictok_live.network.retrofit.HostApiService;
+import com.bytedance.tictok_live.network.retrofit.RetrofitClient;
 import com.bytedance.tictok_live.network.websocket.WebSocketManager;
 
 import java.util.ArrayList;
@@ -42,6 +42,10 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+/**
+ * 没有使用MVVM架构，所有逻辑混在一个文件中，标记过时
+ */
+@Deprecated
 public class LiveRoomActivity extends AppCompatActivity {
     private static final String TAG = "LiveRoomActivity";
 
@@ -77,6 +81,7 @@ public class LiveRoomActivity extends AppCompatActivity {
 
     // WebSocket
     private WebSocketManager webSocketManager;
+
     public static final String ONLINE_COUNT_INCREASE_MSG = "online_increase"; // 约定在线人数加1触发消息
 
     @Override
