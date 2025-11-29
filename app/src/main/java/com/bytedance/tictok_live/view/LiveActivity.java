@@ -2,6 +2,7 @@ package com.bytedance.tictok_live.view;
 
 import android.content.Context;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
@@ -65,6 +66,11 @@ public class LiveActivity extends AppCompatActivity {
     // 标记是否是首帧
     private boolean isFirstPlay = true;
 
+    // 新增成员变量（标记是否是临时切后台，避免重复释放）
+    private boolean isTempBackground = false;
+    // 电源管理器（判断锁屏/亮屏）
+    private PowerManager powerManager;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -76,17 +82,17 @@ public class LiveActivity extends AppCompatActivity {
         // 2. 初始化 Media3 ExoPlayer 播放直播流
         initMedia3PlayerForLive();
 
-        // 2. 获取 ViewModel 实例（由 ViewModelProvider 管理，页面重建不重新创建）
+        // 3. 获取 ViewModel 实例（由 ViewModelProvider 管理，页面重建不重新创建）
         liveViewModel = new ViewModelProvider(this).get(LiveViewModel.class);
 
-        // 3. 观察 ViewModel 的数据，自动更新 UI (无需手动调用)
+        // 4. 观察 ViewModel 的数据，自动更新 UI (无需手动调用)
         observeViewModelData();
 
-        // 4. 触发业务逻辑（只发指令）
+        // 5. 触发业务逻辑（只发指令）
         liveViewModel.loadHostInfo();
         liveViewModel.loadInitComments();
 
-        // 5. 监听关闭在线人数控件
+        // 6. 监听关闭在线人数控件
         listenCloseOnline();
 
         // 7. 监听回车发送评论
@@ -111,6 +117,9 @@ public class LiveActivity extends AppCompatActivity {
         commentAdapter = new CommentAdapter(new ArrayList<>());
         rvComments.setAdapter(commentAdapter);
         rvComments.setLayoutManager(new LinearLayoutManager(this));
+
+        // 初始化电源管理器
+        powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
     }
 
     /**
@@ -227,7 +236,6 @@ public class LiveActivity extends AppCompatActivity {
         isFirstPlay = true;
     }
 
-
     /**
      * 观察 ViewModel 的数据，自动更新 UI
      */
@@ -302,37 +310,63 @@ public class LiveActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * 前台恢复
+     */
     @Override
     protected void onResume() {
         super.onResume();
+        Log.d(TAG,"进入onResume");
+        // 临时切换后台返回，恢复播放
         if (exoPlayer != null){
-            exoPlayer.play();
-            playerView.setKeepScreenOn(true);
+            exoPlayer.play(); // 立即恢复播放，不需要重新初始化
+            playerView.setKeepScreenOn(true); // 前台常量
+            liveViewModel.resumeWebSocket(); // 恢复WebSocket消息接收
+        }else {
+            // 播放器已释放，重新初始化
+            initMedia3PlayerForLive();
         }
     }
 
+    /**
+     * 临时暂停，切换后台
+     */
     @Override
     protected void onPause() {
+        Log.d(TAG,"进入onPause");
         super.onPause();
         if (exoPlayer != null){
-            exoPlayer.pause();
+            exoPlayer.pause(); // 暂停播放
             playerView.setKeepScreenOn(false);
         }
     }
 
+    /**
+     * 后台不可见：仅仅临时切换后台不是放资源，彻底销毁才释放
+     */
     @Override
     protected void onStop() {
-        Log.d(TAG,"进入stop");
+        Log.d(TAG,"进入onStop");
         super.onStop();
-        if (exoPlayer != null){
-            exoPlayer.release();
-            exoPlayer = null;
+        if (!isFinishing() && !isChangingConfigurations()){
+            isTempBackground = true;
+            liveViewModel.pauseWebSocket(); // WebSocket暂停接收
+            if (exoPlayer != null){
+                exoPlayer.setPlayWhenReady(false); //确保暂停
+            }
+        }else {
+            if (exoPlayer != null){
+                exoPlayer.release();
+                exoPlayer = null;
+            }
+            liveViewModel.disconnectWebSocket();
         }
-        liveViewModel.disconnectWebSocket();
+
     }
 
     @Override
     protected void onDestroy() {
+        Log.d(TAG,"进入onDestroy");
         super.onDestroy();
         // 释放播放器
         if (exoPlayer != null){

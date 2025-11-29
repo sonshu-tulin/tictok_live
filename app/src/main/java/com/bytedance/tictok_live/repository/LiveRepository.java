@@ -65,4 +65,18 @@ public class LiveRepository {
     public void disconnectWebSocket() {
         webSocketManager.disConnect();
     }
+
+    /**
+     * 暂停 WebSocket 消息接收（不断开连接）
+     */
+    public void pauseWebSocket() {
+        webSocketManager.pauseMessageReceive();
+    }
+
+    /**
+     * 恢复 WebSocket 消息接收
+     */
+    public void resumeWebSocket() {
+        webSocketManager.resumeMessageReceive();
+    }
 }

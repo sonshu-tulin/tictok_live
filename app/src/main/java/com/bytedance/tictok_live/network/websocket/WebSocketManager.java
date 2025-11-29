@@ -26,8 +26,8 @@ public class WebSocketManager {
     private OnMessageReceivedListener messageListener;
 
     public boolean isConnected = false; // 默认未连接
-
-
+    // WebSocket 暂停标记，默认不暂停
+    private boolean isWebSocketPaused = false;
 
     // 单例模式，确保全局只有一个WebSocket连接
     public static WebSocketManager getInstance() {
@@ -75,6 +75,9 @@ public class WebSocketManager {
             @Override
             public void onMessage(@NonNull WebSocket webSocket, @NonNull String text) {
                 super.onMessage(webSocket, text);
+                if (isWebSocketPaused) {
+                    return;
+                }
                 Log.d(TAG, "收到WebSocket消息：" + text);
                 // 回调给Activity，更新在线人数
                 messageListener.OnMessageReceived(text);
@@ -125,6 +128,20 @@ public class WebSocketManager {
      */
     public void setOnMessageReceivedListener(OnMessageReceivedListener listener){
         this.messageListener = listener;
+    }
+
+    /**
+     * 暂停 WebSocket 消息接收（不断开连接）
+     */
+    public void pauseMessageReceive() {
+        isWebSocketPaused = true;
+    }
+
+    /**
+     * 恢复 WebSocket 消息接收
+     */
+    public void resumeMessageReceive() {
+        isWebSocketPaused = false;
     }
 
 

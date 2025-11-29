@@ -159,8 +159,20 @@ public class LiveViewModel extends ViewModel {
 
     }
 
-
+    // 断开连接
     public void disconnectWebSocket() {
         repository.disconnectWebSocket();
     }
+
+    // 暂停WebSocket
+    public void pauseWebSocket() {
+        Log.d(TAG,"暂停消息接收");
+        repository.pauseWebSocket();
+    }
+
+    public void resumeWebSocket() {
+        Log.d(TAG,"恢复消息接收");
+        repository.resumeWebSocket();
+    }
+
 }
