@@ -16,10 +16,14 @@ import androidx.annotation.OptIn;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.dash.DashMediaSource;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.ui.PlayerView;
@@ -57,6 +61,9 @@ public class LiveActivity extends AppCompatActivity {
     private ExoPlayer exoPlayer;
 
     private CommentAdapter commentAdapter;
+
+    // 标记是否是首帧
+    private boolean isFirstPlay = true;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -114,35 +121,112 @@ public class LiveActivity extends AppCompatActivity {
         // 1. 用 Application 上下文（避免 Activity 内存泄漏）
         Context appContext = getApplicationContext();
 
-        // 2. 配置直播优化参数：轨道选择、缓冲策略
-        ExoPlayer.Builder playerBuilder = new ExoPlayer.Builder(appContext)
-                // 直播场景优先选择匹配设备能力的轨道（避免卡顿）
-                .setTrackSelector(new DefaultTrackSelector(appContext))
-                // 缓冲配置
-                .setLoadControl(new DefaultLoadControl.Builder()
-                        .setBufferDurationsMs(1500, 3000, 1000, 500)
-                        .setPrioritizeTimeOverSizeThresholds(true) // 直播优先保证时间戳连续
-                        .build());
+        // 2. 轨道选择优化（优先低分辨率，加快解码）
+        DefaultTrackSelector trackSelector = new DefaultTrackSelector(appContext);
+        TrackSelectionParameters trackParams = new TrackSelectionParameters.Builder(appContext)
+                .setMaxVideoSizeSd() // 优先标清轨道
+                .setMaxVideoFrameRate(30) // 限制30fps，减少解码耗时
+                .build();
+        trackSelector.setParameters(trackParams);
 
-        exoPlayer = playerBuilder.build();
-        playerView.setPlayer(exoPlayer);
+        // 3. 配置缓冲策略(首帧)
+        LoadControl firstFrameLoadControl = new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                        500,  // 最小缓冲（ms）
+                        4000,  // 最大缓冲（ms）
+                        200,   // 缓冲播放阈值（ms）
+                        500    // 缓冲重试阈值（ms）
+                )
+                .setPrioritizeTimeOverSizeThresholds(true) // 直播优先保证时间戳连续
+                .build();
 
-        // 3. 直播流配置：禁用缓存（直播不需要本地缓存，避免占用控件）
+        // 4. HTTP 数据源优化
         DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
                 .setUserAgent("Media3-LivePlayer/1.0")
                 .setConnectTimeoutMs(5000) // 连接超时 5 秒
                 .setReadTimeoutMs(5000) // 读取超时 5 秒
                 .setAllowCrossProtocolRedirects(true); // 允许跨协议重定向
 
-        // 4. 构建 DASH 直播源
+        // 5. 构建播放器()
+        ExoPlayer.Builder playerBuilder = new ExoPlayer.Builder(appContext)
+                .setTrackSelector(trackSelector)
+                .setLoadControl(firstFrameLoadControl);
+
+        exoPlayer = playerBuilder.build();
+        playerView.setPlayer(exoPlayer);
+
+        // 6. 构建 DASH 直播源
         DashMediaSource dashMediaSource = new DashMediaSource.Factory(dataSourceFactory)
                 .createMediaSource(MediaItem.fromUri(BusinessConstant.LIVE_DASH_URL));
 
-        // 5. 准备并启动播放
+        // 异步准备 + 首帧监听（避免主线程阻塞）
+        exoPlayer.setPlayWhenReady(false);
         exoPlayer.setMediaSource(dashMediaSource);
         exoPlayer.prepare(); // 加载直播流
-        exoPlayer.play(); // 启动播放
+
+        // 播放器监听
+        exoPlayer.addListener(new ExoPlayer.Listener() {
+
+            @Override
+            public void onPlaybackStateChanged(int playbackState) {
+                Player.Listener.super.onPlaybackStateChanged(playbackState);
+                // 首帧就绪且首次播放时立即播放
+                if (playbackState == ExoPlayer.STATE_READY && !exoPlayer.isPlaying() && isFirstPlay) {
+                    exoPlayer.play();
+                    isFirstPlay = false;
+                }
+            }
+
+            // 异常处理（直播窗口越界）
+            @Override
+            public void onPlayerError(PlaybackException error) {
+                Player.Listener.super.onPlayerError(error);
+                if ("ERROR_CODE_BEHIND_LIVE_WINDOW".equals(error.getErrorCodeName())) {
+                    resetPlayer(); // 触发播放器重置
+                }
+            }
+        });
+
     }
+
+    /**
+     * 重置播放器（处理直播窗口越界）
+     */
+    @OptIn(markerClass = UnstableApi.class)
+    private void resetPlayer() {
+        if (exoPlayer == null) return;
+        exoPlayer.stop();
+        exoPlayer.clearMediaItems();
+
+        // 重建数据源
+        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
+                .setUserAgent("Media3-LivePlayer/1.0")
+                .setConnectTimeoutMs(5000)
+                .setReadTimeoutMs(5000)
+                .setAllowCrossProtocolRedirects(true);
+
+        // 重建播放器
+        ExoPlayer newPlayer = new ExoPlayer.Builder(getApplicationContext())
+                .setTrackSelector(new DefaultTrackSelector(getApplicationContext()))
+                .setLoadControl(new DefaultLoadControl.Builder()
+                        .setBufferDurationsMs(500, 6000, 200, 500)
+                        .build())
+                .build();
+
+        // 替换播放器
+        playerView.setPlayer(newPlayer);
+        exoPlayer.release();
+        exoPlayer = newPlayer;
+
+        // 重新加载直播流
+        DashMediaSource dashMediaSource = new DashMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(MediaItem.fromUri(BusinessConstant.LIVE_DASH_URL));
+        exoPlayer.setMediaSource(dashMediaSource);
+        exoPlayer.prepare();
+        exoPlayer.play();
+        isFirstPlay = true;
+    }
+
 
     /**
      * 观察 ViewModel 的数据，自动更新 UI
@@ -176,7 +260,8 @@ public class LiveActivity extends AppCompatActivity {
         // 观察在线人数变化
         liveViewModel.getOnlineCount().observe(this, onlineCount ->{
             Log.d(TAG,"观察到在线人数变化");
-            tvOnline.setText(String.valueOf(onlineCount));
+            String onlineText = onlineCount == null ? "0" : String.valueOf(onlineCount);
+            tvOnline.setText(onlineText);
         });
     }
 
@@ -215,6 +300,35 @@ public class LiveActivity extends AppCompatActivity {
                 return false;
             }
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (exoPlayer != null){
+            exoPlayer.play();
+            playerView.setKeepScreenOn(true);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (exoPlayer != null){
+            exoPlayer.pause();
+            playerView.setKeepScreenOn(false);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        Log.d(TAG,"进入stop");
+        super.onStop();
+        if (exoPlayer != null){
+            exoPlayer.release();
+            exoPlayer = null;
+        }
+        liveViewModel.disconnectWebSocket();
     }
 
     @Override
