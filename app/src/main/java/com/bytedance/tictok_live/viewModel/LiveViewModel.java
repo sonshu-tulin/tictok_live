@@ -7,7 +7,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
-import com.bytedance.tictok_live.content.BusinessConstant;
+import com.bytedance.tictok_live.constant.BusinessConstant;
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.model.HostInfo;
 import com.bytedance.tictok_live.repository.LiveRepository;
@@ -34,7 +34,7 @@ public class LiveViewModel extends ViewModel {
     private MutableLiveData<Integer> onlineCount;
     private MutableLiveData<List<Comment>> commentList;
 
-    public LiveViewModel(){
+    public LiveViewModel() {
         repository = new LiveRepository();
 
         hostInfo = new MutableLiveData<>();
@@ -45,20 +45,22 @@ public class LiveViewModel extends ViewModel {
     }
 
     // 给 View 暴露可观察数据
-    public LiveData<HostInfo> getHostInfo(){
+    public LiveData<HostInfo> getHostInfo() {
         return hostInfo;
     }
-    public LiveData<Integer> getOnlineCount(){
+
+    public LiveData<Integer> getOnlineCount() {
         return onlineCount;
     }
-    public LiveData<List<Comment>> getCommentList(){
+
+    public LiveData<List<Comment>> getCommentList() {
         return commentList;
     }
 
     // WebSocket 监听在线人数
-    private void initWebSocketListener(){
+    private void initWebSocketListener() {
         repository.observeWebSocketMessage(message -> {
-            if (BusinessConstant.ONLINE_COUNT_INCREASE_MSG.equals(message)){
+            if (BusinessConstant.ONLINE_COUNT_INCREASE_MSG.equals(message)) {
                 int current = onlineCount.getValue() == null ? 0 : onlineCount.getValue();
                 onlineCount.postValue(current + 1);
             }
@@ -66,15 +68,15 @@ public class LiveViewModel extends ViewModel {
     }
 
     // 获取主播信息
-    public void loadHostInfo(){
+    public void loadHostInfo() {
         repository.getHostInfo(new Callback<HostInfo>() {
             @Override
             public void onResponse(Call<HostInfo> call, Response<HostInfo> response) {
-                if (response.isSuccessful()&& response.body() != null){
+                if (response.isSuccessful() && response.body() != null) {
                     HostInfo info = response.body();
                     hostInfo.postValue(info);
                     Log.d(TAG, "主播信息加载成功：" + info.toString());
-                }else {
+                } else {
                     Log.w(TAG, "主播信息请求成功但无数据，code：" + response.code());
                 }
             }
@@ -88,7 +90,7 @@ public class LiveViewModel extends ViewModel {
     }
 
     // 业务逻辑：获取初始评论（公屏）
-    public void loadInitComments(){
+    public void loadInitComments() {
         repository.getInitComments(new Callback<List<Comment>>() {
             @Override
             public void onResponse(Call<List<Comment>> call, Response<List<Comment>> response) {
@@ -111,7 +113,7 @@ public class LiveViewModel extends ViewModel {
     }
 
     // 业务逻辑：发送评论
-    public void sendComment(String commentContent){
+    public void sendComment(String commentContent) {
 
         // 内容为空或过长
         if (TextUtils.isEmpty(commentContent) || commentContent.length() > BusinessConstant.COMMENT_MAX_LENGTH) {
@@ -121,19 +123,19 @@ public class LiveViewModel extends ViewModel {
         repository.sendComment(commentContent, new Callback<Comment>() {
             @Override
             public void onResponse(Call<Comment> call, Response<Comment> response) {
-                if (response.isSuccessful() && response.body() !=null){
+                if (response.isSuccessful() && response.body() != null) {
                     Comment newComment = response.body();
                     List<Comment> currentList = commentList.getValue();
-                    if (currentList == null){
+                    if (currentList == null) {
                         currentList = new ArrayList<>();
                     }
                     currentList.add(newComment);
                     commentList.postValue(currentList);
-                    Log.d(TAG,"评论发送成功： " + newComment.getComment());
+                    Log.d(TAG, "评论发送成功： " + newComment.getComment());
 
                     // 触发在线人数增加
                     triggerOnlineCountIncrease();
-                }else {
+                } else {
                     Log.w(TAG, "评论发送失败，响应码：" + response.code());
                 }
             }
@@ -149,9 +151,9 @@ public class LiveViewModel extends ViewModel {
     // 触发在线人数增加
     private void triggerOnlineCountIncrease() {
         boolean isWsSendSuccess = repository.sendOnlineCountIncreaseMsg();
-        if (isWsSendSuccess){
+        if (isWsSendSuccess) {
             Log.d(TAG, "发送评论成功，触发 WS 在线人数+1");
-        }else {
+        } else {
             int currentCount = onlineCount.getValue() == null ? 0 : onlineCount.getValue();
             onlineCount.postValue(currentCount + 1);
             Log.e(TAG, "WS未连接，降级处理，本地更新在线人数：" + (currentCount + 1));
@@ -166,13 +168,20 @@ public class LiveViewModel extends ViewModel {
 
     // 暂停WebSocket
     public void pauseWebSocket() {
-        Log.d(TAG,"暂停消息接收");
+        Log.d(TAG, "暂停消息接收");
         repository.pauseWebSocket();
     }
 
+    // 恢复消息接收
     public void resumeWebSocket() {
-        Log.d(TAG,"恢复消息接收");
+        Log.d(TAG, "恢复消息接收");
         repository.resumeWebSocket();
+    }
+
+    //释放 WebSocket 连接
+    public void releaseWebSocket(){
+        Log.d(TAG, "释放WebSocket连接");
+        repository.releaseWebSocket();
     }
 
 }

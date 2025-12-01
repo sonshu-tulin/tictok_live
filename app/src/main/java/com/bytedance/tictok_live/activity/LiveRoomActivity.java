@@ -323,7 +323,7 @@ public class LiveRoomActivity extends AppCompatActivity {
                     Log.d(TAG, "发送成功:" + newComment);
 
                     // 通过WebSocket发送在线人数 + 1的消息
-                    if (webSocketManager != null && webSocketManager.isConnected){
+                    if (webSocketManager != null && webSocketManager.isConnected.get()){
                         webSocketManager.sendMessage(ONLINE_COUNT_INCREASE_MSG);
                         Log.d(TAG, "发送评论成功，触发WebSocket在线人数+1");
                     }else {
@@ -396,7 +396,7 @@ public class LiveRoomActivity extends AppCompatActivity {
 
         // 关闭WebSocket连接
         if(webSocketManager != null){
-            webSocketManager.disConnect();
+            webSocketManager.disconnect();
         }
 
     }

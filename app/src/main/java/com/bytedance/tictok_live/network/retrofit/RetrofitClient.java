@@ -4,7 +4,7 @@ import androidx.annotation.OptIn;
 import androidx.media3.common.util.Log;
 import androidx.media3.common.util.UnstableApi;
 
-import com.bytedance.tictok_live.content.BusinessConstant;
+import com.bytedance.tictok_live.constant.BusinessConstant;
 
 import java.util.concurrent.TimeUnit;
 

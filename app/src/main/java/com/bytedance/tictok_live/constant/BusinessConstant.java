@@ -1,4 +1,4 @@
-package com.bytedance.tictok_live.content;
+package com.bytedance.tictok_live.constant;
 
 /**
  * 直播业务常量（统一管理）

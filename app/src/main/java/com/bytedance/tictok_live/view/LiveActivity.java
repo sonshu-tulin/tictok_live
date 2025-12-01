@@ -2,7 +2,6 @@ package com.bytedance.tictok_live.view;
 
 import android.content.Context;
 import android.os.Bundle;
-import android.os.PowerManager;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
@@ -33,7 +32,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bytedance.tictok_live.R;
-import com.bytedance.tictok_live.content.BusinessConstant;
+import com.bytedance.tictok_live.constant.BusinessConstant;
 import com.bytedance.tictok_live.recycler.CommentAdapter;
 import com.bytedance.tictok_live.viewModel.LiveViewModel;
 
@@ -45,6 +44,8 @@ import java.util.ArrayList;
 public class LiveActivity extends AppCompatActivity {
 
     public static final String TAG = "LiveActivity";
+
+    // 持有 viewModel 层实例
     private LiveViewModel liveViewModel;
 
     // 控件
@@ -66,10 +67,8 @@ public class LiveActivity extends AppCompatActivity {
     // 标记是否是首帧
     private boolean isFirstPlay = true;
 
-    // 新增成员变量（标记是否是临时切后台，避免重复释放）
+    // 标记是否是临时切后台，避免重复释放
     private boolean isTempBackground = false;
-    // 电源管理器（判断锁屏/亮屏）
-    private PowerManager powerManager;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -118,8 +117,6 @@ public class LiveActivity extends AppCompatActivity {
         rvComments.setAdapter(commentAdapter);
         rvComments.setLayoutManager(new LinearLayoutManager(this));
 
-        // 初始化电源管理器
-        powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
     }
 
     /**
@@ -240,10 +237,10 @@ public class LiveActivity extends AppCompatActivity {
      * 观察 ViewModel 的数据，自动更新 UI
      */
     private void observeViewModelData() {
-        Log.d(TAG,"进入观察");
+        Log.d(TAG, "进入观察");
 
         liveViewModel.getHostInfo().observe(this, hostInfo -> {
-            Log.d(TAG,"观察到主播信息变化");
+            Log.d(TAG, "观察到主播信息变化");
             // 填充头像
             Glide.with(this)
                     .load(hostInfo.getAvatar())
@@ -260,14 +257,14 @@ public class LiveActivity extends AppCompatActivity {
 
         // 观察评论列表变化
         liveViewModel.getCommentList().observe(this, commentList -> {
-            Log.d(TAG,"观察到评论变化");
+            Log.d(TAG, "观察到评论变化");
             commentAdapter.setData(commentList);
             rvComments.scrollToPosition(commentAdapter.getItemCount() - 1);
         });
 
         // 观察在线人数变化
-        liveViewModel.getOnlineCount().observe(this, onlineCount ->{
-            Log.d(TAG,"观察到在线人数变化");
+        liveViewModel.getOnlineCount().observe(this, onlineCount -> {
+            Log.d(TAG, "观察到在线人数变化");
             String onlineText = onlineCount == null ? "0" : String.valueOf(onlineCount);
             tvOnline.setText(onlineText);
         });
@@ -316,15 +313,28 @@ public class LiveActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        Log.d(TAG,"进入onResume");
-        // 临时切换后台返回，恢复播放
-        if (exoPlayer != null){
-            exoPlayer.play(); // 立即恢复播放，不需要重新初始化
-            playerView.setKeepScreenOn(true); // 前台常量
-            liveViewModel.resumeWebSocket(); // 恢复WebSocket消息接收
-        }else {
-            // 播放器已释放，重新初始化
+        Log.d(TAG, "进入onResume");
+        // 恢复 Websocket
+        liveViewModel.resumeWebSocket();
+        // 设置常亮
+        playerView.setKeepScreenOn(true);
+
+        // 临时切换后台返回，仅恢复播放
+        if (isTempBackground) {
+            if (exoPlayer != null) {
+                exoPlayer.play();
+            }
+            isTempBackground = false; // 重置标记
+        }
+        // 非临时后台切换,播放器已经没了,重新初始化播放器
+        else if (exoPlayer == null) {
             initMedia3PlayerForLive();
+        }
+        // 有弹窗,关闭后,正常前台恢复，确保播放
+        else {
+            if (!exoPlayer.isPlaying()) {
+                exoPlayer.play();
+            }
         }
     }
 
@@ -333,12 +343,13 @@ public class LiveActivity extends AppCompatActivity {
      */
     @Override
     protected void onPause() {
-        Log.d(TAG,"进入onPause");
         super.onPause();
-        if (exoPlayer != null){
+        Log.d(TAG, "进入onPause");
+        if (exoPlayer != null) {
             exoPlayer.pause(); // 暂停播放
             playerView.setKeepScreenOn(false);
         }
+        liveViewModel.pauseWebSocket(); // 暂停接收消息
     }
 
     /**
@@ -346,16 +357,18 @@ public class LiveActivity extends AppCompatActivity {
      */
     @Override
     protected void onStop() {
-        Log.d(TAG,"进入onStop");
+        Log.d(TAG, "进入onStop");
         super.onStop();
-        if (!isFinishing() && !isChangingConfigurations()){
+        // 区分「临时后台」和「彻底销毁/配置变更」
+        if (!isFinishing() && !isChangingConfigurations()) {
+            // 标记为临时切换后台
             isTempBackground = true;
-            liveViewModel.pauseWebSocket(); // WebSocket暂停接收
-            if (exoPlayer != null){
-                exoPlayer.setPlayWhenReady(false); //确保暂停
+            if (exoPlayer != null) {
+                exoPlayer.setPlayWhenReady(false); // 确保暂停
             }
-        }else {
-            if (exoPlayer != null){
+        } else {
+            // 彻底销毁/配置变更：释放播放器 + 断开 WebSocket 连接
+            if (exoPlayer != null) {
                 exoPlayer.release();
                 exoPlayer = null;
             }
@@ -364,16 +377,19 @@ public class LiveActivity extends AppCompatActivity {
 
     }
 
+    /**
+     * 销毁
+     */
     @Override
     protected void onDestroy() {
-        Log.d(TAG,"进入onDestroy");
+        Log.d(TAG, "进入onDestroy");
         super.onDestroy();
         // 释放播放器
-        if (exoPlayer != null){
+        if (exoPlayer != null) {
             exoPlayer.release();
             exoPlayer = null;
         }
-
-        liveViewModel.disconnectWebSocket();
+        // 释放连接
+        liveViewModel.releaseWebSocket();
     }
 }
