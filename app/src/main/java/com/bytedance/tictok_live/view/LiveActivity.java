@@ -33,6 +33,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.bytedance.tictok_live.R;
 import com.bytedance.tictok_live.constant.BusinessConstant;
+import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.recycler.CommentAdapter;
 import com.bytedance.tictok_live.viewModel.LiveViewModel;
 
@@ -69,6 +70,9 @@ public class LiveActivity extends AppCompatActivity {
 
     // 标记是否是临时切后台，避免重复释放
     private boolean isTempBackground = false;
+
+    // // 记录上一次的评论数量，标记是否是首次全量加载评论
+    private int lastCommentCount = 0;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -256,9 +260,31 @@ public class LiveActivity extends AppCompatActivity {
         });
 
         // 观察评论列表变化
-        liveViewModel.getCommentList().observe(this, commentList -> {
-            Log.d(TAG, "观察到评论变化");
-            commentAdapter.setData(commentList);
+        liveViewModel.getCommentList().observe(this, newComments -> {
+            Log.d(TAG, "观察到评论变化，当前列表长度：" + (newComments != null ? newComments.size() : 0));
+            if (newComments == null) return;
+
+            int newCount = newComments.size();
+
+            // 场景1：首次加载（上次长度为 0，全量刷新）
+            if (lastCommentCount == 0){
+                Log.d(TAG, "首次加载");
+                commentAdapter.setData(newComments);
+            }
+            // 场景2：新增单条评论（局部刷新）
+            else if (newCount == lastCommentCount + 1) {
+                Log.d(TAG, "局部刷新");
+                Comment newComment = newComments.get(newCount - 1);
+                commentAdapter.addComment(newComment);
+            }
+            // 场景3：其它情况（列表重置....）
+            else {
+                Log.d(TAG,"其它情况");
+                commentAdapter.setData(newComments);
+            }
+
+            // 更新上次长度
+            lastCommentCount = newCount;
             rvComments.scrollToPosition(commentAdapter.getItemCount() - 1);
         });
 

@@ -71,6 +71,7 @@ public class CommentAdapter extends RecyclerView.Adapter<CommentViewHolder> {
      * @param comments 评论列表
      */
     public void setData(List<Comment> comments) {
+        commentList.clear(); // 先清空原有列表，避免重复
         if (comments == null) {
             commentList = new ArrayList<>();
         }

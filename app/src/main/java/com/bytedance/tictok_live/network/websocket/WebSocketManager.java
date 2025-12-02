@@ -50,14 +50,13 @@ public class WebSocketManager {
     private Timer reconnectTimer;
 
     // 心跳配置
-    private static final long HEARTBEAT_INTERVAL = 5000; // 心跳间隔（5秒）
+    private static final long HEARTBEAT_INTERVAL = 10000; // 心跳间隔（10秒）
     private static final int MAX_HEARTBEAT_FAIL = 2; // 最大心跳失败次数
     private final AtomicInteger heartbeatFailCount = new AtomicInteger(0);
     private Timer heartbeatTimer;
     private Handler heartbeatDelayHandler; // 用于取消心跳失败检查的延迟任务
     private static final int MSG_HEARTBEAT_FAIL = 1001; // 心跳失败检查消息
 
-    // 私有构造方法
     private WebSocketManager() {
         // 全局复用 OkHttpClient
         okHttpClient = new OkHttpClient.Builder()
