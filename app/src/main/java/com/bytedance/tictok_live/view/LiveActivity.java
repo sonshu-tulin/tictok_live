@@ -21,6 +21,7 @@ import com.bumptech.glide.Glide;
 import com.bytedance.tictok_live.R;
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.recycler.CommentAdapter;
+import com.bytedance.tictok_live.utils.monitor.FluencyMonitor;
 import com.bytedance.tictok_live.utils.player.LivePlayerManager;
 import com.bytedance.tictok_live.viewModel.LiveViewModel;
 
@@ -58,6 +59,9 @@ public class LiveActivity extends AppCompatActivity {
     // // 记录上一次的评论数量，标记是否是首次全量加载评论
     private int lastCommentCount = 0;
 
+    // 流畅性监控
+    private FluencyMonitor fluencyMonitor;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -69,6 +73,10 @@ public class LiveActivity extends AppCompatActivity {
         // 2. 播放直播流
         livePlayerManager = new LivePlayerManager(this, playerView);
         livePlayerManager.initPlayer();
+
+        // 启动流畅性监控
+        fluencyMonitor = new FluencyMonitor();
+        fluencyMonitor.start();
 
         // 3. 获取 ViewModel 实例（由 ViewModelProvider 管理，页面重建不重新创建）
         liveViewModel = new ViewModelProvider(this).get(LiveViewModel.class);
@@ -215,7 +223,7 @@ public class LiveActivity extends AppCompatActivity {
         liveViewModel.resumeWebSocket();
         // 设置常亮
         playerView.setKeepScreenOn(true);
-
+        fluencyMonitor.start();
 
         // 情况 1：只是临时切入后台，回到前台后恢复播放
         if (isTempBackground) {
@@ -243,6 +251,7 @@ public class LiveActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         Log.d(TAG, "进入onPause");
+        fluencyMonitor.stop();
 
         livePlayerManager.pause();
         playerView.setKeepScreenOn(false);
