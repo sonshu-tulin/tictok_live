@@ -1,4 +1,4 @@
-package com.bytedance.tictok_live.network.retrofit;
+package com.bytedance.tictok_live.utils.retrofit;
 
 import androidx.annotation.OptIn;
 import androidx.media3.common.util.Log;

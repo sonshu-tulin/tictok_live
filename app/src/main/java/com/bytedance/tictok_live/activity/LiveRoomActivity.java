@@ -31,9 +31,9 @@ import com.bytedance.tictok_live.R;
 import com.bytedance.tictok_live.recycler.CommentAdapter;
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.model.HostInfo;
-import com.bytedance.tictok_live.network.retrofit.HostApiService;
-import com.bytedance.tictok_live.network.retrofit.RetrofitClient;
-import com.bytedance.tictok_live.network.websocket.WebSocketManager;
+import com.bytedance.tictok_live.utils.retrofit.HostApiService;
+import com.bytedance.tictok_live.utils.retrofit.RetrofitClient;
+import com.bytedance.tictok_live.utils.websocket.WebSocketManager;
 
 import java.util.ArrayList;
 import java.util.List;

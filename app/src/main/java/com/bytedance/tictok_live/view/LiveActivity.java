@@ -1,6 +1,5 @@
 package com.bytedance.tictok_live.view;
 
-import android.content.Context;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -12,29 +11,17 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
-import androidx.annotation.OptIn;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.media3.common.MediaItem;
-import androidx.media3.common.PlaybackException;
-import androidx.media3.common.Player;
-import androidx.media3.common.TrackSelectionParameters;
-import androidx.media3.common.util.UnstableApi;
-import androidx.media3.datasource.DefaultHttpDataSource;
-import androidx.media3.exoplayer.DefaultLoadControl;
-import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.exoplayer.LoadControl;
-import androidx.media3.exoplayer.dash.DashMediaSource;
-import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bytedance.tictok_live.R;
-import com.bytedance.tictok_live.constant.BusinessConstant;
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.recycler.CommentAdapter;
+import com.bytedance.tictok_live.utils.player.LivePlayerManager;
 import com.bytedance.tictok_live.viewModel.LiveViewModel;
 
 import java.util.ArrayList;
@@ -61,12 +48,9 @@ public class LiveActivity extends AppCompatActivity {
     private TextView tvOnline;
 
     // 对象
-    private ExoPlayer exoPlayer;
-
     private CommentAdapter commentAdapter;
 
-    // 标记是否是首帧
-    private boolean isFirstPlay = true;
+    private LivePlayerManager livePlayerManager;
 
     // 标记是否是临时切后台，避免重复释放
     private boolean isTempBackground = false;
@@ -82,8 +66,9 @@ public class LiveActivity extends AppCompatActivity {
         // 1. 初始化
         initView();
 
-        // 2. 初始化 Media3 ExoPlayer 播放直播流
-        initMedia3PlayerForLive();
+        // 2. 播放直播流
+        livePlayerManager = new LivePlayerManager(this, playerView);
+        livePlayerManager.initPlayer();
 
         // 3. 获取 ViewModel 实例（由 ViewModelProvider 管理，页面重建不重新创建）
         liveViewModel = new ViewModelProvider(this).get(LiveViewModel.class);
@@ -121,120 +106,6 @@ public class LiveActivity extends AppCompatActivity {
         rvComments.setAdapter(commentAdapter);
         rvComments.setLayoutManager(new LinearLayoutManager(this));
 
-    }
-
-    /**
-     * 初始化 Media3 ExoPlayer
-     */
-    @OptIn(markerClass = UnstableApi.class)
-    private void initMedia3PlayerForLive() {
-        // 1. 用 Application 上下文（避免 Activity 内存泄漏）
-        Context appContext = getApplicationContext();
-
-        // 2. 轨道选择优化（优先低分辨率，加快解码）
-        DefaultTrackSelector trackSelector = new DefaultTrackSelector(appContext);
-        TrackSelectionParameters trackParams = new TrackSelectionParameters.Builder(appContext)
-                .setMaxVideoSizeSd() // 优先标清轨道
-                .setMaxVideoFrameRate(30) // 限制30fps，减少解码耗时
-                .build();
-        trackSelector.setParameters(trackParams);
-
-        // 3. 配置缓冲策略(首帧)
-        LoadControl firstFrameLoadControl = new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(
-                        500,  // 最小缓冲（ms）
-                        4000,  // 最大缓冲（ms）
-                        200,   // 缓冲播放阈值（ms）
-                        500    // 缓冲重试阈值（ms）
-                )
-                .setPrioritizeTimeOverSizeThresholds(true) // 直播优先保证时间戳连续
-                .build();
-
-        // 4. HTTP 数据源优化
-        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
-                .setUserAgent("Media3-LivePlayer/1.0")
-                .setConnectTimeoutMs(5000) // 连接超时 5 秒
-                .setReadTimeoutMs(5000) // 读取超时 5 秒
-                .setAllowCrossProtocolRedirects(true); // 允许跨协议重定向
-
-        // 5. 构建播放器()
-        ExoPlayer.Builder playerBuilder = new ExoPlayer.Builder(appContext)
-                .setTrackSelector(trackSelector)
-                .setLoadControl(firstFrameLoadControl);
-
-        exoPlayer = playerBuilder.build();
-        playerView.setPlayer(exoPlayer);
-
-        // 6. 构建 DASH 直播源
-        DashMediaSource dashMediaSource = new DashMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(BusinessConstant.LIVE_DASH_URL));
-
-        // 异步准备 + 首帧监听（避免主线程阻塞）
-        exoPlayer.setPlayWhenReady(false);
-        exoPlayer.setMediaSource(dashMediaSource);
-        exoPlayer.prepare(); // 加载直播流
-
-        // 播放器监听
-        exoPlayer.addListener(new ExoPlayer.Listener() {
-
-            @Override
-            public void onPlaybackStateChanged(int playbackState) {
-                Player.Listener.super.onPlaybackStateChanged(playbackState);
-                // 首帧就绪且首次播放时立即播放
-                if (playbackState == ExoPlayer.STATE_READY && !exoPlayer.isPlaying() && isFirstPlay) {
-                    exoPlayer.play();
-                    isFirstPlay = false;
-                }
-            }
-
-            // 异常处理（直播窗口越界）
-            @Override
-            public void onPlayerError(PlaybackException error) {
-                Player.Listener.super.onPlayerError(error);
-                if ("ERROR_CODE_BEHIND_LIVE_WINDOW".equals(error.getErrorCodeName())) {
-                    resetPlayer(); // 触发播放器重置
-                }
-            }
-        });
-
-    }
-
-    /**
-     * 重置播放器（处理直播窗口越界）
-     */
-    @OptIn(markerClass = UnstableApi.class)
-    private void resetPlayer() {
-        if (exoPlayer == null) return;
-        exoPlayer.stop();
-        exoPlayer.clearMediaItems();
-
-        // 重建数据源
-        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
-                .setUserAgent("Media3-LivePlayer/1.0")
-                .setConnectTimeoutMs(5000)
-                .setReadTimeoutMs(5000)
-                .setAllowCrossProtocolRedirects(true);
-
-        // 重建播放器
-        ExoPlayer newPlayer = new ExoPlayer.Builder(getApplicationContext())
-                .setTrackSelector(new DefaultTrackSelector(getApplicationContext()))
-                .setLoadControl(new DefaultLoadControl.Builder()
-                        .setBufferDurationsMs(500, 6000, 200, 500)
-                        .build())
-                .build();
-
-        // 替换播放器
-        playerView.setPlayer(newPlayer);
-        exoPlayer.release();
-        exoPlayer = newPlayer;
-
-        // 重新加载直播流
-        DashMediaSource dashMediaSource = new DashMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(BusinessConstant.LIVE_DASH_URL));
-        exoPlayer.setMediaSource(dashMediaSource);
-        exoPlayer.prepare();
-        exoPlayer.play();
-        isFirstPlay = true;
     }
 
     /**
@@ -345,22 +216,23 @@ public class LiveActivity extends AppCompatActivity {
         // 设置常亮
         playerView.setKeepScreenOn(true);
 
-        // 临时切换后台返回，仅恢复播放
+
+        // 情况 1：只是临时切入后台，回到前台后恢复播放
         if (isTempBackground) {
-            if (exoPlayer != null) {
-                exoPlayer.play();
-            }
-            isTempBackground = false; // 重置标记
+            livePlayerManager.resume();
+            isTempBackground = false;
+            return;
         }
-        // 非临时后台切换,播放器已经没了,重新初始化播放器
-        else if (exoPlayer == null) {
-            initMedia3PlayerForLive();
+
+        // 情况 2：如果之前播放器已经被销毁，需要重新初始化
+        if (livePlayerManager.isPlayerNull()) {
+            livePlayerManager.initPlayer();
+            return;
         }
-        // 有弹窗,关闭后,正常前台恢复，确保播放
-        else {
-            if (!exoPlayer.isPlaying()) {
-                exoPlayer.play();
-            }
+
+        // 情况 3：正常前台恢复，确保正在播放
+        if (!livePlayerManager.isPlaying()) {
+            livePlayerManager.resume();
         }
     }
 
@@ -371,10 +243,9 @@ public class LiveActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         Log.d(TAG, "进入onPause");
-        if (exoPlayer != null) {
-            exoPlayer.pause(); // 暂停播放
-            playerView.setKeepScreenOn(false);
-        }
+
+        livePlayerManager.pause();
+        playerView.setKeepScreenOn(false);
         liveViewModel.pauseWebSocket(); // 暂停接收消息
     }
 
@@ -386,18 +257,15 @@ public class LiveActivity extends AppCompatActivity {
         Log.d(TAG, "进入onStop");
         super.onStop();
         // 区分「临时后台」和「彻底销毁/配置变更」
-        if (!isFinishing() && !isChangingConfigurations()) {
-            // 标记为临时切换后台
+        boolean activityStillExists = !isFinishing() && !isChangingConfigurations();
+
+        if (activityStillExists) {
+            // 情况 1：普通后台切换（Activity 未真正销毁）
             isTempBackground = true;
-            if (exoPlayer != null) {
-                exoPlayer.setPlayWhenReady(false); // 确保暂停
-            }
+            livePlayerManager.pause();
         } else {
-            // 彻底销毁/配置变更：释放播放器 + 断开 WebSocket 连接
-            if (exoPlayer != null) {
-                exoPlayer.release();
-                exoPlayer = null;
-            }
+            // 情况 2：彻底销毁或配置变化 → 完全释放资源
+            livePlayerManager.release();
             liveViewModel.disconnectWebSocket();
         }
 
@@ -411,10 +279,7 @@ public class LiveActivity extends AppCompatActivity {
         Log.d(TAG, "进入onDestroy");
         super.onDestroy();
         // 释放播放器
-        if (exoPlayer != null) {
-            exoPlayer.release();
-            exoPlayer = null;
-        }
+        livePlayerManager.release();
         // 释放连接
         liveViewModel.releaseWebSocket();
     }

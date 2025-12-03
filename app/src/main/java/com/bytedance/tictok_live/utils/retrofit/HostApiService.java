@@ -1,4 +1,4 @@
-package com.bytedance.tictok_live.network.retrofit;
+package com.bytedance.tictok_live.utils.retrofit;
 
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.model.HostInfo;

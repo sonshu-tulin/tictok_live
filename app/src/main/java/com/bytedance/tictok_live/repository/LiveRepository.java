@@ -4,9 +4,9 @@ package com.bytedance.tictok_live.repository;
 import com.bytedance.tictok_live.constant.BusinessConstant;
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.model.HostInfo;
-import com.bytedance.tictok_live.network.retrofit.HostApiService;
-import com.bytedance.tictok_live.network.retrofit.RetrofitClient;
-import com.bytedance.tictok_live.network.websocket.WebSocketManager;
+import com.bytedance.tictok_live.utils.retrofit.HostApiService;
+import com.bytedance.tictok_live.utils.retrofit.RetrofitClient;
+import com.bytedance.tictok_live.utils.websocket.WebSocketManager;
 
 import java.util.List;
 

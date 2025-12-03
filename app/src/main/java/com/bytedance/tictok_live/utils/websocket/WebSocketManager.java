@@ -1,4 +1,4 @@
-package com.bytedance.tictok_live.network.websocket;
+package com.bytedance.tictok_live.utils.websocket;
 
 import android.os.Handler;
 import android.os.HandlerThread;

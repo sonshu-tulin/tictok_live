@@ -27,7 +27,7 @@ public class LiveViewModel extends ViewModel {
     private static final String TAG = "LiveViewModel";
 
     // 持有 Model 层实例
-    private LiveRepository repository;
+    private LiveRepository liveRepository;
 
     // 暴露给 View 的可观察状态（在线人数、评论列表）
     private MutableLiveData<HostInfo> hostInfo;
@@ -35,7 +35,7 @@ public class LiveViewModel extends ViewModel {
     private MutableLiveData<List<Comment>> commentList;
 
     public LiveViewModel() {
-        repository = new LiveRepository();
+        liveRepository = new LiveRepository();
 
         hostInfo = new MutableLiveData<>();
         onlineCount = new MutableLiveData<>(BusinessConstant.ONLINE_COUNT_INIT_VALUE);
@@ -59,7 +59,7 @@ public class LiveViewModel extends ViewModel {
 
     // WebSocket 监听在线人数
     private void initWebSocketListener() {
-        repository.observeWebSocketMessage(message -> {
+        liveRepository.observeWebSocketMessage(message -> {
             if (BusinessConstant.ONLINE_COUNT_INCREASE_MSG.equals(message)) {
                 int current = onlineCount.getValue() == null ? 0 : onlineCount.getValue();
                 onlineCount.postValue(current + 1);
@@ -69,7 +69,7 @@ public class LiveViewModel extends ViewModel {
 
     // 获取主播信息
     public void loadHostInfo() {
-        repository.getHostInfo(new Callback<HostInfo>() {
+        liveRepository.getHostInfo(new Callback<HostInfo>() {
             @Override
             public void onResponse(Call<HostInfo> call, Response<HostInfo> response) {
                 if (response.isSuccessful() && response.body() != null) {
@@ -91,7 +91,7 @@ public class LiveViewModel extends ViewModel {
 
     // 业务逻辑：获取初始评论（公屏）
     public void loadInitComments() {
-        repository.getInitComments(new Callback<List<Comment>>() {
+        liveRepository.getInitComments(new Callback<List<Comment>>() {
             @Override
             public void onResponse(Call<List<Comment>> call, Response<List<Comment>> response) {
                 // 过虑空或过长评论
@@ -120,7 +120,7 @@ public class LiveViewModel extends ViewModel {
             return;
         }
 
-        repository.sendComment(commentContent, new Callback<Comment>() {
+        liveRepository.sendComment(commentContent, new Callback<Comment>() {
             @Override
             public void onResponse(Call<Comment> call, Response<Comment> response) {
                 if (response.isSuccessful() && response.body() != null) {
@@ -150,7 +150,7 @@ public class LiveViewModel extends ViewModel {
 
     // 触发在线人数增加
     private void triggerOnlineCountIncrease() {
-        boolean isWsSendSuccess = repository.sendOnlineCountIncreaseMsg();
+        boolean isWsSendSuccess = liveRepository.sendOnlineCountIncreaseMsg();
         if (isWsSendSuccess) {
             Log.d(TAG, "发送评论成功，触发 WS 在线人数+1");
         } else {
@@ -163,25 +163,25 @@ public class LiveViewModel extends ViewModel {
 
     // 断开连接
     public void disconnectWebSocket() {
-        repository.disconnectWebSocket();
+        liveRepository.disconnectWebSocket();
     }
 
     // 暂停WebSocket
     public void pauseWebSocket() {
         Log.d(TAG, "暂停消息接收");
-        repository.pauseWebSocket();
+        liveRepository.pauseWebSocket();
     }
 
     // 恢复消息接收
     public void resumeWebSocket() {
         Log.d(TAG, "恢复消息接收");
-        repository.resumeWebSocket();
+        liveRepository.resumeWebSocket();
     }
 
     //释放 WebSocket 连接
     public void releaseWebSocket(){
         Log.d(TAG, "释放WebSocket连接");
-        repository.releaseWebSocket();
+        liveRepository.releaseWebSocket();
     }
 
 }
