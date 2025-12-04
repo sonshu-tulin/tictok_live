@@ -89,7 +89,7 @@ public class FluencyMonitor {
                         // 输出日志
                         Log.d(TAG,
                                 "1秒统计 -> 平均FPS = " + averageFps
-                                        + ", 累计丢帧总数 = " + droppedFrames.get()
+                                        // + ", 累计丢帧总数 = " + droppedFrames.get()
                                         + ", 1秒内帧数 = " + frameCount);
 
                         // 重置统计变量，准备下一个5秒

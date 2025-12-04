@@ -11,6 +11,7 @@ import com.bytedance.tictok_live.constant.BusinessConstant;
 import com.bytedance.tictok_live.model.Comment;
 import com.bytedance.tictok_live.model.HostInfo;
 import com.bytedance.tictok_live.repository.LiveRepository;
+import com.bytedance.tictok_live.utils.preload.LivePreloadManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -184,4 +185,20 @@ public class LiveViewModel extends ViewModel {
         liveRepository.releaseWebSocket();
     }
 
+    /**
+     * 加载主播信息，使用预加载（如果可以的话）
+     */
+    public void loadHostInfoWithPre() {
+        LivePreloadManager preloadManager = LivePreloadManager.getInstance();
+        HostInfo preloadHost = preloadManager.getCachedHostInfo();
+
+        if (preloadHost != null){
+            Log.d(TAG, "复用预加载的主播信息");
+            hostInfo.postValue(preloadHost);
+        }else {
+            Log.w(TAG,"无预加载主播信息，兜底请求");
+            loadHostInfo();
+        }
+
+    }
 }

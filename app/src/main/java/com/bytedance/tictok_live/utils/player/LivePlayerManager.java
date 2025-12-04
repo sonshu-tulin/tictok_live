@@ -20,6 +20,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.ui.PlayerView;
 
 import com.bytedance.tictok_live.constant.BusinessConstant;
+import com.bytedance.tictok_live.utils.preload.LivePreloadManager;
 
 /**
  * 直播管理
@@ -28,21 +29,47 @@ public class LivePlayerManager {
 
     private static final String TAG = "LivePlayerManager";
 
-    private ExoPlayer exoPlayer;
+    private static volatile LivePlayerManager instance;
 
     private final Context appContext;
-    private final PlayerView playerView;
 
-    public LivePlayerManager(Context context, PlayerView playerView) {
+    // 播放器
+    private ExoPlayer exoPlayer;
+    private PlayerView playerView;
+
+    // 状态标记
+    private boolean coreInitialized = false;     // 是否初始化
+    private boolean mediaPrepared = false;       // 是否加载 media source
+    private boolean firstFrameSeen = false;      // 首帧是否完成
+    private long initStartTime = -1;             // 首帧统计
+
+
+    public LivePlayerManager(Context context) {
         this.appContext = context.getApplicationContext();
-        this.playerView = playerView;
+    }
+
+    public static LivePlayerManager getInstance(Context ctx) {
+        if (instance == null) {
+            synchronized (LivePlayerManager.class) {
+                if (instance == null) {
+                    instance = new LivePlayerManager(ctx.getApplicationContext());
+                }
+            }
+        }
+        return instance;
     }
 
     /**
-     * 初始化直播播放器
+     * 初始化核心播放器（用于启动页）
      */
     @OptIn(markerClass = UnstableApi.class)
-    public void initPlayer() {
+    public synchronized void initPlayer() {
+        // 如果已经初始化
+        if (coreInitialized) return;
+
+        coreInitialized = true;
+
+        initStartTime = System.currentTimeMillis();
 
         // 如果已存在，先释放
         if (exoPlayer != null) {
@@ -74,25 +101,66 @@ public class LivePlayerManager {
                 .setLoadControl(liveLoadControl);
 
         exoPlayer = builder.build();
-        playerView.setPlayer(exoPlayer);
 
-        // 4. HTTP 数据源
+        // 4. 监听首帧、异常
+        addPlayerListener();
+
+        if (playerView != null) {
+            playerView.setPlayer(exoPlayer);
+        }
+
+        Log.d(TAG, "核心播放器初始化完成（未prepare），耗时：" + (System.currentTimeMillis() - initStartTime) + "ms");
+    }
+
+    /**
+     * 继续加载媒体资源
+     */
+    @OptIn(markerClass = UnstableApi.class)
+    public synchronized void prepareIfNeeded(){
+        if (mediaPrepared) {
+            Log.d(TAG, "DASH媒体资源已加载，跳过重复prepare");
+            return;
+        }
+        if (exoPlayer == null) {
+            Log.e(TAG, "播放器未初始化，无法加载媒体资源");
+            return;
+        }
+
         DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
-                .setUserAgent("Media3-LivePlayer")
+                .setUserAgent("Live-Player")
                 .setConnectTimeoutMs(5000)
                 .setReadTimeoutMs(5000)
                 .setAllowCrossProtocolRedirects(true);
 
-
-        // 5. 构建 DASH 直播流
         DashMediaSource dashMediaSource = new DashMediaSource.Factory(dataSourceFactory)
                 .createMediaSource(MediaItem.fromUri(BusinessConstant.LIVE_DASH_URL));
 
         exoPlayer.setMediaSource(dashMediaSource);
         exoPlayer.prepare();
 
-        // 6. 监听
-        addPlayerListener();
+        mediaPrepared = true;
+        Log.d(TAG, "prepareIfNeeded(): 直播媒体加载开始");
+    }
+
+    /**
+     * UI 绑定播放器
+     */
+    public synchronized  void attachPlayerView(PlayerView view){
+        this.playerView = view;
+        if (exoPlayer != null){
+            view.setPlayer(exoPlayer);
+        }
+    }
+
+    /**
+     * UI 解除绑定
+     */
+    public synchronized void detachPlayerView() {
+        if (playerView != null) {
+            // 不释放播放器（由 preload 管理），只是解除绑定
+            playerView.setPlayer(null);
+            playerView = null;
+        }
     }
 
     /**
@@ -103,8 +171,12 @@ public class LivePlayerManager {
 
             @Override
             public void onPlaybackStateChanged(int state) {
-                if (state == Player.STATE_READY) {
-                    Log.d(TAG, "首帧已就绪");
+                if (!firstFrameSeen && state == Player.STATE_READY) {
+                    firstFrameSeen = true;
+                    int ttffMs = (int) (System.currentTimeMillis() - initStartTime);
+                    Log.d(TAG, "首帧渲染时间 TTFF = " + ttffMs + " ms");
+
+                    // 播放器自动播放
                     if (!exoPlayer.isPlaying()) {
                         exoPlayer.play();
                     }
@@ -203,6 +275,12 @@ public class LivePlayerManager {
             exoPlayer.release();
             exoPlayer = null;
         }
+        detachPlayerView();
+        coreInitialized = false;
+        mediaPrepared = false;
+        firstFrameSeen = false;
+        initStartTime = -1;
+        Log.d(TAG, "播放器资源释放完成");
     }
 
 
@@ -218,5 +296,47 @@ public class LivePlayerManager {
      */
     public boolean isPlaying() {
         return exoPlayer.isPlaying();
+    }
+
+    /**
+     * 复用预加载初始化，失败则兜底重新创建
+     */
+    public void initPlayerWithPreload(PlayerView playerView) {
+        this.playerView = playerView;
+
+        // 1. 获取预加载管理器，尝试复用预加载实例
+        LivePreloadManager preloadManager = LivePreloadManager.getInstance();
+        LivePlayerManager preloadPlayer = preloadManager.getPreloadPlayer();
+
+        if (preloadPlayer != null && !preloadPlayer.isPlayerNull()){
+            // 场景1：复用预加载的播放器实例
+            Log.d(TAG, "复用预加载的播放器实例");
+            // 接管预加载的实例的核心资源
+            this.exoPlayer = preloadPlayer.getExoPlayer();
+            this.coreInitialized = preloadPlayer.coreInitialized;
+            this.mediaPrepared = preloadPlayer.mediaPrepared;
+
+            // 绑定控件 + 继续加载 + 恢复播放
+            attachPlayerView(playerView);
+            prepareIfNeeded();
+            resume();
+        }else {
+            // 场景2：预加载失败，异步兜底初始化
+            Log.w(TAG,"预加载播放器为空，兜底初始化");
+            new Thread(() -> {
+                // 子线程初始化核心播放器
+                initPlayer();
+                // 切回主线程绑定控件
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    attachPlayerView(playerView);
+                    prepareIfNeeded();
+                    resume();
+                });
+            }).start();
+        }
+    }
+
+    private ExoPlayer getExoPlayer() {
+        return exoPlayer;
     }
 }

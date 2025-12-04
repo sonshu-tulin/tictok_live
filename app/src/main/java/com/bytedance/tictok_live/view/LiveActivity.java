@@ -71,10 +71,10 @@ public class LiveActivity extends AppCompatActivity {
         initView();
 
         // 2. 播放直播流
-        livePlayerManager = new LivePlayerManager(this, playerView);
-        livePlayerManager.initPlayer();
+        livePlayerManager = LivePlayerManager.getInstance(this);
+        livePlayerManager.initPlayerWithPreload(playerView);
 
-        // 启动流畅性监控
+        // 3.启动流畅性监控
         fluencyMonitor = new FluencyMonitor();
         fluencyMonitor.start();
 
@@ -84,8 +84,8 @@ public class LiveActivity extends AppCompatActivity {
         // 4. 观察 ViewModel 的数据，自动更新 UI (无需手动调用)
         observeViewModelData();
 
-        // 5. 触发业务逻辑（只发指令）
-        liveViewModel.loadHostInfo();
+        // 5. 加载主播信息和评论
+        liveViewModel.loadHostInfoWithPre();
         liveViewModel.loadInitComments();
 
         // 6. 监听关闭在线人数控件
@@ -113,7 +113,6 @@ public class LiveActivity extends AppCompatActivity {
         commentAdapter = new CommentAdapter(new ArrayList<>());
         rvComments.setAdapter(commentAdapter);
         rvComments.setLayoutManager(new LinearLayoutManager(this));
-
     }
 
     /**
